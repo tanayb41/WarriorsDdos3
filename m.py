@@ -10,9 +10,9 @@ from keep_alive import keep_alive
 keep_alive()
 
 # Insert your Telegram bot token here
-bot = telebot.TeleBot('6980701998:AAHadfwfW-5_0Eq2onPrEFhUmjscrXJxvto')
+bot = telebot.TeleBot('7108990129:AAF2Ua0l0kNQ-DhR_4IDuXsnJdHJpFSbwNI')
 # Admin user IDs
-admin_id = {"1132426169"}
+admin_id = {"6694202933"}
 
 # Files for data storage
 USER_FILE = "users.json"
@@ -357,7 +357,7 @@ VIP 🌟:
 1𝐖𝐞𝐞𝐤: 800 𝐫𝐬
 2𝐖𝐞𝐞𝐤: 1200 𝐫𝐬
 𝐌𝐨𝐧𝐓𝐡: 1700 𝐫𝐬 
-@AmitPfc 💥
+@MADPYCHOSGAMING2 💥
 '''
     bot.reply_to(message, response)
 
