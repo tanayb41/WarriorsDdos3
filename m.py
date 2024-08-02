@@ -29,6 +29,10 @@ COOLDOWN_TIME = 0  # in seconds
 CONSECUTIVE_ATTACKS_LIMIT = 5
 CONSECUTIVE_ATTACKS_COOLDOWN = 10  # in seconds
 
+# Restart settings
+MAX_RESTARTS = 5
+RESTART_PERIOD = 60  # Seconds
+
 # In-memory storage
 users = {}
 keys = {}
