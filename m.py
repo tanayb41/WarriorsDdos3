@@ -10,245 +10,11 @@ import logging
 from aiogram import Bot
 import asyncio
 
-
 from keep_alive import keep_alive
 keep_alive()
 
-import string
-import random
-import logging
-from datetime import datetime, timedelta
-from Crypto.Hash import SHA256
-from telegram import Update, ForceReply
-from telegram.ext import Updater, CommandHandler, CallbackContext, Filters
-from apscheduler.schedulers.background import BackgroundScheduler
-import json
-import os
-
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-logger = logging.getLogger(__name__)
-
-# Load or initialize approved users from user.json
-user_file = 'user.json'
-if os.path.exists(user_file):
-    with open(user_file, 'r') as f:
-        approved_users = json.load(f)
-else:
-    approved_users = {}
-
-# Dictionary to store generated keys and their statuses
-generated_keys = {}
-
-# Function to save approved users to user.json
-def save_users():
-    with open(user_file, 'w') as f:
-        json.dump(approved_users, f, default=str)
-
-# Function to save generated keys to keys.json
-def save_keys():
-    with open('keys.json', 'w') as f:
-        json.dump(generated_keys, f, default=str)
-
-# Function to load generated keys from keys.json
-if os.path.exists('keys.json'):
-    with open('keys.json', 'r') as f:
-        generated_keys = json.load(f)
-else:
-    generated_keys = {}
-
-# Function to generate a random key
-def generate_key() -> str:
-    length = 32  # Length of the key
-    chars = string.ascii_letters + string.digits
-    random_key = ''.join(random.choice(chars) for _ in range(length))
-    return random_key
-
-# Function to hash the key
-def hash_key(key: str) -> str:
-    hash_object = SHA256.new(data=key.encode())
-    return hash_object.hexdigest()
-
-# Command handler to generate and send a unique key with a validity duration
-def gen_key(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
-
-    if str(user_id) not in approved_users:
-        update.message.reply_text('You are not approved to generate a key.')
-        return
-
-    user_info = approved_users[str(user_id)]
-
-    if datetime.now() > datetime.fromisoformat(user_info['expiration']):
-        update.message.reply_text('Your approval has expired. Please contact an admin.')
-        return
-
-    if user_info['balance'] <= 0:
-        update.message.reply_text('You have no balance left to generate keys.')
-        return
-
-    if len(context.args) < 1:
-        update.message.reply_text('Please specify the validity duration (in days) for the key.')
-        return
-
-    try:
-        duration_days = int(context.args[0])
-    except ValueError:
-        update.message.reply_text('Invalid duration. Please specify the validity duration (in days) for the key.')
-        return
-
-    random_key = generate_key()
-    hashed_key = hash_key(random_key)
-
-    # Store the generated key with the validity duration
-    generated_keys[hashed_key] = {
-        'user_id': user_id,
-        'redeemed': False,
-        'duration_days': duration_days,
-        'redemption_time': None
-    }
-    save_keys()
-
-    # Deduct one from the user's balance
-    user_info['balance'] -= 1
-    save_users()
-
-    # Log the key generation
-    logger.info(f"User {user_id} generated key: {random_key} (Hash: {hashed_key})")
-
-    update.message.reply_text(f"Your unique key: {random_key}\nHash: {hashed_key}\nValidity: {duration_days} days\nRemaining balance: {user_info['balance']}")
-
-# Command handler to approve a user with an optional expiration time and initial balance
-def approve_user(update: Update, context: CallbackContext) -> None:
-    if len(context.args) < 2:
-        update.message.reply_text('Please specify the user ID, initial balance, and optionally the number of days until expiration.')
-        return
-
-    try:
-        approve_id = context.args[0]
-        balance = int(context.args[1])
-
-        if len(context.args) > 2:
-            days = int(context.args[2])
-            expiration_time = datetime.now() + timedelta(days=days)
-        else:
-            expiration_time = datetime.max
-
-        approved_users[approve_id] = {
-            'balance': balance,
-            'expiration': expiration_time.isoformat()
-        }
-        save_users()
-
-        update.message.reply_text(f'User {approve_id} has been approved with a balance of {balance} and expiration time of {expiration_time}.')
-    except ValueError:
-        update.message.reply_text('Invalid user ID, balance, or number of days.')
-
-# Command handler to redeem a key
-def redeem_key(update: Update, context: CallbackContext) -> None:
-    if not context.args:
-        update.message.reply_text('Please provide the key to redeem.')
-        return
-
-    key_to_redeem = context.args[0]
-    hashed_key = hash_key(key_to_redeem)
-
-    if hashed_key in generated_keys and not generated_keys[hashed_key]['redeemed']:
-        generated_keys[hashed_key]['redeemed'] = True
-        user_id = generated_keys[hashed_key]['user_id']
-        redemption_time = datetime.now()
-        generated_keys[hashed_key]['redemption_time'] = redemption_time.isoformat()
-        save_keys()
-
-        # Log the key redemption
-        logger.info(f"User {user_id} redeemed key: {key_to_redeem} (Hash: {hashed_key})")
-
-        update.message.reply_text(f"The key has been successfully redeemed. It will expire in {generated_keys[hashed_key]['duration_days']} days from now.")
-    else:
-        update.message.reply_text('Invalid or already redeemed key.')
-
-# Command handler to remove a user
-def remove_user(update: Update, context: CallbackContext) -> None:
-    if not context.args:
-        update.message.reply_text('Please provide the user ID to remove.')
-        return
-
-    user_id = context.args[0]
-    if user_id in approved_users:
-        del approved_users[user_id]
-        save_users()
-        update.message.reply_text(f'User {user_id} has been removed.')
-    else:
-        update.message.reply_text('User ID not found.')
-
-# Function to check for expiring and expired keys
-def check_expiring_keys(context: CallbackContext) -> None:
-    current_time = datetime.now()
-    to_notify = []
-    to_remove = []
-
-    for key, data in generated_keys.items():
-        if data['redeemed']:
-            redemption_time = datetime.fromisoformat(data['redemption_time'])
-            expiration_time = redemption_time + timedelta(days=data['duration_days'])
-
-            # Notify users 60 minutes before expiration
-            if expiration_time - timedelta(minutes=60) <= current_time < expiration_time:
-                to_notify.append((data['user_id'], expiration_time))
-            
-            # Remove expired keys
-            if current_time >= expiration_time:
-                to_remove.append((data['user_id'], key))
-
-    for user_id, expiration_time in to_notify:
-        context.bot.send_message(chat_id=user_id, text=f"🚨YOUR KEY IS ENDING IN 60 MINUTES🚨")
-
-    for user_id, key in to_remove:
-        del generated_keys[key]
-        if user_id in approved_users:
-            del approved_users[str(user_id)]
-        save_keys()
-        save_users()
-        context.bot.send_message(chat_id=user_id, text="Your key has expired and you have been removed from the approved users list.")
-
-# Start command handler
-def start(update: Update, context: CallbackContext) -> None:
-    user = update.effective_user
-    update.message.reply_html(
-        rf'Hi {user.mention_html()}! Use /genkey <days> to generate a unique key with a specified validity duration if you are approved. Admins can use /approve <user_id> <balance> <days> to approve users with an optional expiration time and initial balance. Use /redeem <key> to redeem a key. Admins can use /remove <user_id> to remove a user.',
-        reply_markup=ForceReply(selective=True),
-    )
-
-def main() -> None:
-    """Start the bot."""
-    # Replace 'YOUR TOKEN HERE' with your actual bot token
-    updater = Updater("7353106103:AAEmWPOELbGBOlzJiKX-LUkS-WcHcqTYphc")
-
-    # Get the dispatcher to register handlers
-    dispatcher = updater.dispatcher
-
-    # on different commands - answer in Telegram
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("genkey", gen_key))
-    dispatcher.add_handler(CommandHandler("approve", approve_user, Filters.user(user_id="1132426169")))  # Replace ADMIN_USER_ID with the admin's user ID
-    dispatcher.add_handler(CommandHandler("redeem", redeem_key))
-    dispatcher.add_handler(CommandHandler("remove", remove_user, Filters.user(user_id="1132426169")))  # Replace ADMIN_USER_ID with the admin's user ID
-
-    # Start the Bot
-    updater.start_polling()
-
-    # Schedule job to check for expiring and expired keys
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(lambda: check_expiring_keys(dispatcher.bot), 'interval', minutes=1)
-    scheduler.start()
-
-
 # Insert your Telegram bot token here
-bot = telebot.TeleBot('7353106103:AAEmWPOELbGBOlzJiKX-LUkS-WcHcqTYphc')
+bot = telebot.TeleBot('7153969610:AAEJL8OImaL2A75BrW2JLoPh3lJcME_fKXg')
 # Admin user IDs
 admin_id = {"1132426169"}
 
@@ -256,6 +22,7 @@ admin_id = {"1132426169"}
 USER_FILE = "users.json"
 LOG_FILE = "log.txt"
 KEY_FILE = "keys.json"
+BALANCE_FILE = "balance.json"
 
 # Cooldown settings
 COOLDOWN_TIME = 0  # in seconds
@@ -271,8 +38,47 @@ users = {}
 keys = {}
 bgmi_cooldown = {}
 consecutive_attacks = {}
+admin_balance = {}
 
-# Read users and keys from files initially
+# Read users, keys, and balances from files initially
+def load_data():
+    global users, keys, admin_balance
+    users = read_users()
+    keys = read_keys()
+    admin_balance = read_balance()
+
+def read_users():
+    try:
+        with open(USER_FILE, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+def save_users():
+    with open(USER_FILE, "w") as file:
+        json.dump(users, file)
+
+def read_keys():
+    try:
+        with open(KEY_FILE, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+def save_keys():
+    with open(KEY_FILE, "w") as file:
+        json.dump(keys, file)
+
+def read_balance():
+    try:
+        with open(BALANCE_FILE, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+def save_balance():
+    with open(BALANCE_FILE, "w") as file:
+        json.dump(admin_balance, file)
 
 def log_command(user_id, target, port, time):
     user_info = bot.get_chat(user_id)
@@ -288,7 +94,7 @@ def clear_logs():
                 return "𝐋𝐨𝐠𝐬 𝐰𝐞𝐫𝐞 𝐀𝐥𝐫𝐞𝐚𝐝𝐲 𝐅𝐮𝐜𝐤𝐞𝐝"
             else:
                 file.truncate(0)
-                return "𝐅𝐮𝐜𝐤𝐞𝐝 𝐓𝐡𝐞 𝐋𝐨𝐠𝐬 𝐒𝐮𝐜𝐜𝐞𝐬𝐟𝐮𝐥𝐥𝐲✅"
+                return "𝐅𝐮𝐜𝐤𝐞𝐝 𝐓𝐡𝐞 𝐋𝐨𝐠𝐬 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲✅"
     except FileNotFoundError:
         return "𝐋𝐨𝐠𝐬 𝐖𝐞𝐫𝐞 𝐀𝐥𝐫𝐞𝐚𝐝𝐲 𝐅𝐮𝐜𝐤𝐞𝐝."
 
@@ -304,13 +110,90 @@ def record_command_logs(user_id, command, target=None, port=None, time=None):
     with open(LOG_FILE, "a") as file:
         file.write(log_entry + "\n")
 
+def get_remaining_approval_time(user_id):
+    expiry_date = user_approval_expiry.get(user_id)
+    if expiry_date:
+        remaining_time = expiry_date - datetime.datetime.now()
+        if remaining_time.days < 0:
+            return "Expired"
+        else:
+            return str(remaining_time)
+    else:
+        return "N/A"
+
+def generate_key(length=11):
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
 
 def add_time_to_current_date(hours=0, days=0):
     return (datetime.datetime.now() + datetime.timedelta(hours=hours, days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
+@bot.message_handler(commands=['genkey'])
+def generate_key_command(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        if user_id not in admin_balance:
+            admin_balance[user_id] = 10  # Initial balance for new admins, adjust as needed
+        
+        command = message.text.split()
+        if len(command) == 3:
+            try:
+                time_amount = int(command[1])
+                time_unit = command[2].lower()
+                if time_unit == 'hours':
+                    expiration_date = add_time_to_current_date(hours=time_amount)
+                elif time_unit == 'days':
+                    expiration_date = add_time_to_current_date(days=time_amount)
+                else:
+                    raise ValueError("Invalid time unit")
+                key = generate_key()
+                
+                key_cost = 1  # Define the cost per key, adjust as needed
+                if admin_balance[user_id] >= key_cost:
+                    admin_balance[user_id] -= key_cost
+                    keys[key] = expiration_date
+                    save_keys()
+                    save_balance()
+                    response = f"𝐋𝐢𝐜𝐞𝐧𝐬𝐞: {key}\n𝐄𝐬𝐩𝐢𝐫𝐞𝐬 𝐎𝐧: {expiration_date}\n𝐀𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐅𝐨𝐫 1 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐀𝐜𝐜𝐨𝐮𝐧𝐭\nAdmin Balance: {admin_balance[user_id]}"
+                else:
+                    response = "𝐍𝐨𝐭 𝐄𝐧𝐨𝐮𝐠𝐡 𝐁𝐚𝐥𝐚𝐧𝐜𝐞 𝐭𝐨 𝐆𝐞𝐧𝐞𝐫𝐚𝐭𝐞 𝐊𝐞𝐲"
+            except ValueError:
+                response = "𝐏𝐥𝐞𝐚𝐬𝐞 𝐒𝐩𝐞𝐜𝐢𝐟𝐲 𝐀 𝐕𝐚𝐥𝐢𝐝 𝐍𝐮𝐦𝐛𝐞𝐫 𝐚𝐧𝐝 𝐮𝐧𝐢𝐭 𝐨𝐟 𝐓𝐢𝐦𝐞 (hours/days)."
+        else:
+            response = "𝐔𝐬𝐚𝐠𝐞: /genkey <amount> <hours/days>"
+    else:
+        response = "𝐎𝐧𝐥𝐲 𝐏𝐚𝐩𝐚 𝐎𝐟 𝐛𝐨𝐭 𝐜𝐚𝐧 𝐝𝐨 𝐭𝐡𝐢𝐬"
 
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['redeem'])
+def redeem_key_command(message):
+    user_id = str(message.chat.id)
+    command = message.text.split()
+    if len(command) == 2:
+        key = command[1]
+        if key in keys:
+            expiration_date = keys[key]
+            if user_id in users:
+                user_expiration = datetime.datetime.strptime(users[user_id], '%Y-%m-%d %H:%M:%S')
+                new_expiration_date = max(user_expiration, datetime.datetime.now()) + datetime.timedelta(hours=1)
+                users[user_id] = new_expiration_date.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                users[user_id] = expiration_date
+            save_users()
+            del keys[key]
+            save_keys()
+            response = f"✅𝐊𝐞𝐲 𝐫𝐞𝐝𝐞𝐞𝐦𝐞𝐝 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲! 𝐀𝐜𝐜𝐞𝐬𝐬 𝐆𝐫𝐚𝐧𝐭𝐞𝐝 𝐔𝐧𝐭𝐢𝐥𝐥: {users[user_id]}"
+        else:
+            response = "𝐄𝐱𝐩𝐢𝐫𝐞 𝐊𝐞𝐘 𝐌𝐚𝐭 𝐃𝐚𝐚𝐋 𝐋𝐚𝐰𝐝𝐞 ."
+    else:
+        response = "𝐔𝐬𝐚𝐠𝐞: /redeem <key>"
+
+    bot.reply_to(message, response)
+
+# Command handler for retrieving user info
 @bot.message_handler(commands=['myinfo'])
-def get_user_info(message):
+defdef get_user_info(message):
     user_id = str(message.chat.id)
     user_info = bot.get_chat(user_id)
     username = user_info.username if user_info.username else "N/A"
@@ -506,7 +389,7 @@ VIP 🌟:
 1𝐖𝐞𝐞𝐤: 800 𝐫𝐬
 2𝐖𝐞𝐞𝐤: 1200 𝐫𝐬
 𝐌𝐨𝐧𝐓𝐡: 1700 𝐫𝐬 
-@GODxBGMI_OWNER 💥
+@no_tricks_x 💥
 '''
     bot.reply_to(message, response)
 
