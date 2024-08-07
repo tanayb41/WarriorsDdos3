@@ -10,11 +10,12 @@ import logging
 from aiogram import Bot
 import asyncio
 
+
 from keep_alive import keep_alive
 keep_alive()
 
 # Insert your Telegram bot token here
-bot = telebot.TeleBot('7153969610:AAEJL8OImaL2A75BrW2JLoPh3lJcME_fKXg')
+bot = telebot.TeleBot('7212239899:AAFXHpOXa1uMF5dPB1S9j43i1f4x_-Cy-Yo')
 # Admin user IDs
 admin_id = {"1132426169"}
 
@@ -22,7 +23,6 @@ admin_id = {"1132426169"}
 USER_FILE = "users.json"
 LOG_FILE = "log.txt"
 KEY_FILE = "keys.json"
-BALANCE_FILE = "balance.json"
 
 # Cooldown settings
 COOLDOWN_TIME = 0  # in seconds
@@ -38,14 +38,12 @@ users = {}
 keys = {}
 bgmi_cooldown = {}
 consecutive_attacks = {}
-admin_balance = {}
 
-# Read users, keys, and balances from files initially
+# Read users and keys from files initially
 def load_data():
-    global users, keys, admin_balance
+    global users, keys
     users = read_users()
     keys = read_keys()
-    admin_balance = read_balance()
 
 def read_users():
     try:
@@ -69,17 +67,6 @@ def save_keys():
     with open(KEY_FILE, "w") as file:
         json.dump(keys, file)
 
-def read_balance():
-    try:
-        with open(BALANCE_FILE, "r") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        return {}
-
-def save_balance():
-    with open(BALANCE_FILE, "w") as file:
-        json.dump(admin_balance, file)
-
 def log_command(user_id, target, port, time):
     user_info = bot.get_chat(user_id)
     username = user_info.username if user_info.username else f"UserID: {user_id}"
@@ -94,7 +81,7 @@ def clear_logs():
                 return "𝐋𝐨𝐠𝐬 𝐰𝐞𝐫𝐞 𝐀𝐥𝐫𝐞𝐚𝐝𝐲 𝐅𝐮𝐜𝐤𝐞𝐝"
             else:
                 file.truncate(0)
-                return "𝐅𝐮𝐜𝐤𝐞𝐝 𝐓𝐡𝐞 𝐋𝐨𝐠𝐬 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲✅"
+                return "𝐅𝐮𝐜𝐤𝐞𝐝 𝐓𝐡𝐞 𝐋𝐨𝐠𝐬 𝐒𝐮𝐜𝐜𝐞𝐬𝐟𝐮𝐥𝐥𝐲✅"
     except FileNotFoundError:
         return "𝐋𝐨𝐠𝐬 𝐖𝐞𝐫𝐞 𝐀𝐥𝐫𝐞𝐚𝐝𝐲 𝐅𝐮𝐜𝐤𝐞𝐝."
 
@@ -132,9 +119,6 @@ def add_time_to_current_date(hours=0, days=0):
 def generate_key_command(message):
     user_id = str(message.chat.id)
     if user_id in admin_id:
-        if user_id not in admin_balance:
-            admin_balance[user_id] = 10  # Initial balance for new admins, adjust as needed
-        
         command = message.text.split()
         if len(command) == 3:
             try:
@@ -147,16 +131,9 @@ def generate_key_command(message):
                 else:
                     raise ValueError("Invalid time unit")
                 key = generate_key()
-                
-                key_cost = 1  # Define the cost per key, adjust as needed
-                if admin_balance[user_id] >= key_cost:
-                    admin_balance[user_id] -= key_cost
-                    keys[key] = expiration_date
-                    save_keys()
-                    save_balance()
-                    response = f"𝐋𝐢𝐜𝐞𝐧𝐬𝐞: {key}\n𝐄𝐬𝐩𝐢𝐫𝐞𝐬 𝐎𝐧: {expiration_date}\n𝐀𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐅𝐨𝐫 1 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐀𝐜𝐜𝐨𝐮𝐧𝐭\nAdmin Balance: {admin_balance[user_id]}"
-                else:
-                    response = "𝐍𝐨𝐭 𝐄𝐧𝐨𝐮𝐠𝐡 𝐁𝐚𝐥𝐚𝐧𝐜𝐞 𝐭𝐨 𝐆𝐞𝐧𝐞𝐫𝐚𝐭𝐞 𝐊𝐞𝐲"
+                keys[key] = expiration_date
+                save_keys()
+                response = f"𝐋𝐢𝐜𝐞𝐧𝐬𝐞: {key}\n𝐄𝐬𝐩𝐢𝐫𝐞𝐬 𝐎𝐧: {expiration_date}\n𝐀𝐯𝐚𝐢𝐥𝐚𝐛𝐥𝐞 𝐅𝐨𝐫 1 𝐓𝐞𝐥𝐞𝐠𝐫𝐚𝐦 𝐀𝐜𝐜𝐨𝐮𝐧𝐭 "
             except ValueError:
                 response = "𝐏𝐥𝐞𝐚𝐬𝐞 𝐒𝐩𝐞𝐜𝐢𝐟𝐲 𝐀 𝐕𝐚𝐥𝐢𝐝 𝐍𝐮𝐦𝐛𝐞𝐫 𝐚𝐧𝐝 𝐮𝐧𝐢𝐭 𝐨𝐟 𝐓𝐢𝐦𝐞 (hours/days)."
         else:
@@ -183,7 +160,7 @@ def redeem_key_command(message):
             save_users()
             del keys[key]
             save_keys()
-            response = f"✅𝐊𝐞𝐲 𝐫𝐞𝐝𝐞𝐞𝐦𝐞𝐝 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲! 𝐀𝐜𝐜𝐞𝐬𝐬 𝐆𝐫𝐚𝐧𝐭𝐞𝐝 𝐔𝐧𝐭𝐢𝐥𝐥: {users[user_id]}"
+            response = f"✅𝐊𝐞𝐲 𝐫𝐞𝐝𝐞𝐞𝐦𝐞𝐝 𝐒𝐮𝐜𝐜𝐞𝐬𝐟𝐮𝐥𝐥𝐲! 𝐀𝐜𝐜𝐞𝐬𝐬 𝐆𝐫𝐚𝐧𝐭𝐞𝐝 𝐔𝐧𝐭𝐢𝐥𝐥: {users[user_id]}"
         else:
             response = "𝐄𝐱𝐩𝐢𝐫𝐞 𝐊𝐞𝐘 𝐌𝐚𝐭 𝐃𝐚𝐚𝐋 𝐋𝐚𝐰𝐝𝐞 ."
     else:
@@ -193,7 +170,7 @@ def redeem_key_command(message):
 
 # Command handler for retrieving user info
 @bot.message_handler(commands=['myinfo'])
-defdef get_user_info(message):
+def get_user_info(message):
     user_id = str(message.chat.id)
     user_info = bot.get_chat(user_id)
     username = user_info.username if user_info.username else "N/A"
@@ -389,7 +366,7 @@ VIP 🌟:
 1𝐖𝐞𝐞𝐤: 800 𝐫𝐬
 2𝐖𝐞𝐞𝐤: 1200 𝐫𝐬
 𝐌𝐨𝐧𝐓𝐡: 1700 𝐫𝐬 
-@no_tricks_x 💥
+@GODxBGMI_OWNER 💥
 '''
     bot.reply_to(message, response)
 
