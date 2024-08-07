@@ -1,4 +1,4 @@
-# GODxBGMI-V3
+# WarriorsLab @Warriors_King
 # DDoS Attack Bot
 
 This repository contains a Telegram bot designed to perform DDoS attacks. The bot allows authorized users to initiate attacks against specified targets. It includes various commands for managing users, logging activities, and viewing information about attacks. 
@@ -84,7 +84,7 @@ If you wish to contribute to this project, feel free to submit a pull request or
 
 ## Contact
 
-For any queries or support, contact [@GODxBGMI_OWNER]([https://t.me/+K8Srg-M2G4ljMzU1](https://t.me/+K8Srg-M2G4ljMzU1)) on Telegram. 
+For any queries or support, contact [@Warriors_King & @Iconic_hack]on Telegram. 
 
 ---
 
